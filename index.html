@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Block Master Game</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js untuk 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Tone.js untuk Audio -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #0f172a; /* Latar belakang gelap luar game */
+            touch-action: manipulation;
+        }
+        .title-font {
+            font-family: 'Fredoka One', cursive;
+        }
+        
+        /* Glassmorphism & Visual Polish */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+        }
+
+        .title-3d-blue {
+            text-shadow: 0 4px 0 #1d4ed8, 0 8px 20px rgba(30, 58, 138, 0.35);
+        }
+
+        .title-3d-orange {
+            text-shadow: 0 4px 0 #c2410c, 0 8px 20px rgba(194, 65, 12, 0.35);
+        }
+
+        /* Keyframes Animasi Melayang untuk Kubus Dekorasi */
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0px) rotate(0deg) scale(1); }
+            50% { transform: translateY(-14px) rotate(8deg) scale(1.05); }
+        }
+        @keyframes floatSlowReverse {
+            0%, 100% { transform: translateY(0px) rotate(0deg) scale(1); }
+            50% { transform: translateY(12px) rotate(-8deg) scale(0.95); }
+        }
+        .animate-float-1 { animation: floatSlow 4s ease-in-out infinite; }
+        .animate-float-2 { animation: floatSlowReverse 5s ease-in-out infinite; }
+
+        /* Container game untuk mengunci rasio 16:9 Landscape */
+        #game-wrapper {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 0.5rem;
+            box-sizing: border-box;
+        }
+        #game-app {
+            width: 100%;
+            height: 100%;
+            max-width: 1280px; /* Maksimal lebar untuk desktop */
+            max-height: 100vh;
+            aspect-ratio: 16 / 9;
+            background-color: white;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        @media (min-width: 640px) {
+            #game-app {
+                max-height: calc(100vh - 2rem);
+                border-radius: 1.5rem;
+            }
+        }
+
+        /* Custom scrollbar untuk list level */
+        ::-webkit-scrollbar { height: 12px; width: 12px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; border: 3px solid #e0f2fe; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        /* 3D Canvas */
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, #e0f2fe 0%, #bae6fd 100%);
+            border-radius: 1rem;
+            box-shadow: inset 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+            outline: none;
+        }
+
+        /* Animasi Bouncing */
+        .bounce-in { animation: bounceIn 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards; }
+        @keyframes bounceIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <!-- Wrapper untuk memusatkan rasio 16:9 -->
+    <div id="game-wrapper">
+        <div id="game-app">
+            
+            <!-- Header (HUD) -->
+            <header id="hud" class="hidden flex justify-between items-center p-2 sm:p-3 bg-white border-b-2 border-slate-100 z-10 shadow-sm shrink-0 h-[52px] sm:h-[65px] absolute top-0 w-full left-0 px-2 sm:px-4">
+                <!-- Info Kiri: Koin & Timer -->
+                <div class="flex items-center space-x-1.5 sm:space-x-3">
+                    <button id="btn-toggle-fullscreen-hud" title="Layar Penuh" class="text-xs sm:text-base font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 sm:px-3 py-1 rounded-full shadow-sm flex items-center transition-all active:scale-95">
+                        <span class="fs-icon-hud">⛶</span>
+                    </button>
+                    <div class="text-xs sm:text-base font-bold bg-slate-100 text-slate-700 px-2 sm:px-3 py-1 rounded-full shadow-sm flex items-center" id="timer-container">
+                        <span class="mr-1">⏱️</span> <span id="val-time">--:--</span>
+                    </div>
+                    <div class="text-xs sm:text-base font-bold bg-amber-100 text-amber-700 px-2 sm:px-3 py-1 rounded-full shadow-sm flex items-center">
+                        <span class="mr-1">🪙</span> <span id="val-coins">0</span>
+                    </div>
+                </div>
+                
+                <!-- Info Kanan: Nyawa, Poin, Badge -->
+                <div class="flex items-center space-x-1.5 sm:space-x-3">
+                    <div class="text-xs sm:text-base font-bold bg-purple-100 text-purple-700 px-2 sm:px-3 py-1 rounded-full shadow-sm flex items-center">
+                        <span class="mr-1">🏆</span> <span id="val-badges">0</span>
+                    </div>
+                    <div class="text-xs sm:text-base font-bold bg-rose-100 text-rose-600 border border-rose-200 px-2 sm:px-3 py-1 rounded-full shadow-sm flex items-center">
+                        <span class="mr-1">❤️</span> <span id="val-lives">3</span>
+                    </div>
+                    <div class="text-xs sm:text-base font-bold bg-yellow-100 text-yellow-600 border border-yellow-200 px-2 sm:px-3 py-1 rounded-full shadow-sm flex items-center">
+                        <span class="mr-1">⭐</span> <span id="val-score">0</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Home Screen (Pemilihan Level Horizontal) -->
+            <div id="screen-home" class="flex-1 flex flex-col items-center justify-between p-2 sm:p-4 overflow-hidden w-full absolute inset-0 bg-gradient-to-b from-sky-300 via-sky-200 to-indigo-100 z-20 select-none">
+                
+                <!-- Dekorasi Background Melayang 3D CSS (Kiri & Kanan) -->
+                <div class="absolute top-24 left-3 sm:left-6 w-10 h-10 sm:w-14 sm:h-14 animate-float-1 pointer-events-none opacity-75 z-0">
+                    <div class="w-full h-full bg-amber-400 rounded-2xl border-4 border-amber-500 shadow-lg transform rotate-12"></div>
+                </div>
+                <div class="absolute bottom-10 right-4 sm:right-8 w-12 h-12 sm:w-16 sm:h-16 animate-float-2 pointer-events-none opacity-75 z-0">
+                    <div class="w-full h-full bg-indigo-500 rounded-3xl border-4 border-indigo-600 shadow-xl transform -rotate-12"></div>
+                </div>
+                <div class="absolute top-28 right-4 sm:right-8 w-8 h-8 sm:w-10 sm:h-10 animate-float-2 pointer-events-none opacity-50 z-0">
+                    <div class="w-full h-full bg-rose-400 rounded-xl border-2 border-rose-500 shadow-md transform rotate-45"></div>
+                </div>
+
+                <!-- Stats Ringkas Top Bar -->
+                <div class="w-full max-w-4xl flex justify-between items-center z-20 shrink-0 px-2 pt-0.5">
+                    <div class="flex items-center space-x-2">
+                        <button id="btn-toggle-bgm" title="Musik: ON" class="glass-card w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shadow-sm text-sm sm:text-base text-slate-700 hover:bg-white/90 active:scale-95 transition-all">
+                            <span id="bgm-icon">🎵</span>
+                        </button>
+                        <button id="btn-toggle-fullscreen" title="Layar Penuh" class="glass-card w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shadow-sm text-sm sm:text-base text-slate-700 hover:bg-white/90 active:scale-95 transition-all">
+                            <span id="fs-icon">⛶</span>
+                        </button>
+                    </div>
+                    <div class="glass-card px-3 sm:px-4 py-1 rounded-full flex items-center space-x-1.5 shadow-sm">
+                        <span class="text-amber-500 text-xs sm:text-base">⭐</span>
+                        <span class="font-black text-[11px] sm:text-xs text-slate-700" id="home-total-stars">0</span>
+                    </div>
+                </div>
+
+                <!-- Judul Utama Game (3D Dynamic Effect) -->
+                <div class="mt-0 text-center bounce-in shrink-0 z-10">
+                    <div class="inline-block relative">
+                        <img src="https://i.imgur.com/z0MT3Wh.png" onerror="this.onerror=null; this.src='https://imgur.com/z0MT3Wh.png';" alt="Block Master" class="h-10 sm:h-14 lg:h-16 w-auto object-contain mx-auto drop-shadow-md">
+                    </div>
+                    <div class="mt-1">
+                        <p class="text-[11px] sm:text-xs font-bold text-slate-600 px-3 py-0.5 rounded-full inline-block bg-white/60 backdrop-blur-md border border-white/80 shadow-sm">
+                            Petualangan Bangun Ruang 3D Interaktif 🧩
+                        </p>
+                    </div>
+                    <p class="text-[10px] sm:text-[11px] font-black text-slate-600 mt-1 tracking-wider uppercase">
+                        Oleh: Lia Alfiana, S.Pd
+                    </p>
+                </div>
+                
+                <!-- Container Pemilihan Level dengan Tombol Navigasi Arrow -->
+                <div class="w-full max-w-[98%] lg:max-w-5xl my-auto flex items-center justify-center relative shrink-0 z-10">
+                    <!-- Tombol Panah Kiri -->
+                    <button id="btn-scroll-left" class="hidden sm:flex absolute -left-2 sm:-left-4 z-20 bg-white hover:bg-slate-50 text-blue-600 p-2 rounded-full shadow-lg border-2 border-blue-200 active:scale-95 transition-all justify-center items-center font-black">
+                        ◀
+                    </button>
+
+                    <!-- Container Scroll Horizontal Level -->
+                    <div id="level-list" class="flex flex-row overflow-x-auto gap-2.5 sm:gap-4 py-2 px-3 snap-x snap-mandatory items-center min-h-[175px] sm:min-h-[210px] w-full no-scrollbar scroll-smooth">
+                        <!-- Levels di-generate oleh JavaScript -->
+                    </div>
+
+                    <!-- Tombol Panah Kanan -->
+                    <button id="btn-scroll-right" class="hidden sm:flex absolute -right-2 sm:-right-4 z-20 bg-white hover:bg-slate-50 text-blue-600 p-2 rounded-full shadow-lg border-2 border-blue-200 active:scale-95 transition-all justify-center items-center font-black">
+                        ▶
+                    </button>
+                </div>
+
+                <!-- Footer Informasi -->
+                <div class="text-[10px] sm:text-xs font-bold text-slate-500 shrink-0 z-10 pb-0.5">
+                    Pilih level di atas untuk memulai tantangan! ✨
+                </div>
+            </div>
+
+            <!-- Area Bermain Utama (Split Screen Kiri & Kanan) -->
+            <div id="screen-game" class="flex-1 flex flex-row hidden bg-white absolute inset-0 top-[52px] sm:top-[65px] pb-0 overflow-hidden">
+                
+                <!-- KIRI: Canvas 3D -->
+                <div class="w-1/2 p-3 sm:p-6 flex flex-col bg-slate-50 border-r border-slate-200">
+                    <div class="flex justify-between items-center mb-2 sm:mb-4 shrink-0">
+                        <h2 id="level-title" class="title-font text-lg sm:text-2xl text-blue-600 truncate mr-2">Level Title</h2>
+                        <button id="btn-back" class="text-slate-500 hover:text-white font-bold text-xs sm:text-sm bg-slate-200 hover:bg-slate-400 px-3 sm:px-5 py-1.5 sm:py-2 rounded-full shadow-sm transition-colors whitespace-nowrap">Kembali</button>
+                    </div>
+                    <div id="canvas-container" class="flex-1 w-full rounded-xl sm:rounded-2xl shadow-inner min-h-[150px] relative select-none cursor-grab active:cursor-grabbing">
+                        <!-- Controls Overlay untuk Kameran & Sudut Pandang -->
+                        <div id="canvas-controls" class="absolute bottom-2 left-2 right-2 flex justify-between items-center z-10 pointer-events-none">
+                            <div class="bg-slate-900/70 backdrop-blur-md text-white text-[10px] sm:text-xs px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
+                                <span>👆</span> <span>Putar 3D dengan jari/mouse</span>
+                            </div>
+                            <div class="flex gap-1.5 pointer-events-auto">
+                                <button id="btn-view-iso" title="Sudut Pandang Normal" class="bg-white/90 hover:bg-white text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold shadow transition-all hover:scale-105 active:scale-95">📐 Reset</button>
+                                <button id="btn-view-top" title="Lihat dari Atas" class="bg-white/90 hover:bg-white text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold shadow transition-all hover:scale-105 active:scale-95">🔝 Atas</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KANAN: UI Dinamis (Soal, Input, Tombol) -->
+                <div id="level-ui" class="w-1/2 p-4 sm:p-8 flex flex-col justify-center overflow-y-auto bg-white">
+                    <!-- Konten di-inject melalui JS -->
+                </div>
+            </div>
+
+            <!-- Modal Feedback -->
+            <div id="modal-feedback" class="absolute inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+                <div class="bg-white p-6 sm:p-8 rounded-3xl text-center max-w-xs sm:max-w-sm w-full mx-4 shadow-2xl transform transition-all scale-90 opacity-0 flex flex-col items-center" id="modal-content">
+                    <div id="feedback-icon" class="text-6xl sm:text-8xl mb-4">⭐</div>
+                    <h3 id="feedback-title" class="text-2xl sm:text-3xl title-font mb-2 text-slate-800">Luar Biasa!</h3>
+                    <p id="feedback-msg" class="text-base sm:text-lg text-slate-600 mb-6 font-bold">Kamu mendapat +100 poin</p>
+                    <button id="btn-next" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 sm:py-4 rounded-xl text-lg sm:text-xl shadow-[0_4px_0_#2563eb] active:translate-y-[4px] active:shadow-none transition-all">LANJUT</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MAIN JAVASCRIPT -->
+    <script>
+        const LEVEL_DATA = [
+            { id: 1, title: 'Kenali Bangun', desc: 'Identifikasi Kubus & Balok', icon: '🕵️', time: 60 },
+            { id: 2, title: 'Hitung Kubus', desc: 'Berapa jumlah kubusnya?', icon: '🧮', time: 90 },
+            { id: 3, title: 'Bangun Balok', desc: 'Susun sesuai target', icon: '🏗️', time: 120 },
+            { id: 4, title: 'Kubus Hilang', desc: 'Lengkapi bagian rumpang', icon: '🧩', time: 120 },
+            { id: 5, title: 'Build Challenge', desc: 'Gunakan tepat N kubus', icon: '🎯', time: 150 },
+            { id: 6, title: 'MASTER BUILDER', desc: 'Ujian Akhir', icon: '👑', time: 180 }
+        ];
+
+        const Game = {
+            unlockedLevel: 1,
+            lives: 3,
+            score: 0,
+            coins: 0,
+            badges: 0,
+            currentLevel: null,
+            timer: null,
+            timeLeft: 0,
+            scene: null,
+            camera: null,
+            renderer: null,
+            blocks: [],
+            ghostBlocks: [],
+            xrayMode: false,
+            animationId: null,
+            audioReady: false,
+            bgmEnabled: true,
+            bgmPlaying: false,
+            lastSoundTimes: {}
+        };
+
+        let isDraggingCanvas = false;
+        let prevMousePos = { x: 0, y: 0 };
+        let bgmSynth = null;
+        let bgmBassSynth = null;
+        let bgmPattern = null;
+
+        const UI = {
+            home: document.getElementById('screen-home'),
+            game: document.getElementById('screen-game'),
+            hud: document.getElementById('hud'),
+            levelList: document.getElementById('level-list'),
+            levelTitle: document.getElementById('level-title'),
+            levelUi: document.getElementById('level-ui'),
+            valLives: document.getElementById('val-lives'),
+            valScore: document.getElementById('val-score'),
+            valCoins: document.getElementById('val-coins'),
+            valBadges: document.getElementById('val-badges'),
+            valTime: document.getElementById('val-time'),
+            timerContainer: document.getElementById('timer-container'),
+            btnBack: document.getElementById('btn-back'),
+            modal: document.getElementById('modal-feedback'),
+            modalContent: document.getElementById('modal-content'),
+            feedbackIcon: document.getElementById('feedback-icon'),
+            feedbackTitle: document.getElementById('feedback-title'),
+            feedbackMsg: document.getElementById('feedback-msg'),
+            btnNext: document.getElementById('btn-next')
+        };
+
+        const synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: "triangle" },
+            envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 1 }
+        }).toDestination();
+        
+        const dropSynth = new Tone.MembraneSynth().toDestination();
+
+        function initAudio() {
+            if (!Game.audioReady) {
+                Tone.start();
+                Game.audioReady = true;
+            }
+        }
+
+        function initBGM() {
+            if (bgmSynth) return;
+            
+            // Synth melodi utama bernuansa fanfare petualangan/misi
+            bgmSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.02, decay: 0.12, sustain: 0.25, release: 0.4 }
+            }).toDestination();
+            bgmSynth.volume.value = -12;
+
+            // Synth bass ketukan mars heroik
+            bgmBassSynth = new Tone.MembraneSynth({
+                pitchDecay: 0.05,
+                octaves: 2,
+                oscillator: { type: "sine" },
+                envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.3 }
+            }).toDestination();
+            bgmBassSynth.volume.value = -14;
+
+            // Aransemen melodi bernuansa menyelesaikan misi & mars petualangan
+            const missionMelody = [
+                // Bar 1: Fanfare Triumfal C-Major (Semangat Misi)
+                { time: "0:0:0", note: ["C4", "E4"], duration: "8n", type: "lead" },
+                { time: "0:0:2", note: ["G4"], duration: "8n", type: "lead" },
+                { time: "0:1:0", note: ["C5", "G5"], duration: "4n", type: "lead" },
+                { time: "0:2:0", note: ["E5"], duration: "8n", type: "lead" },
+                { time: "0:2:2", note: ["D5"], duration: "8n", type: "lead" },
+                { time: "0:3:0", note: ["C5"], duration: "4n", type: "lead" },
+
+                // Bar 2: Kadens Penuh Semangat (G-Major)
+                { time: "1:0:0", note: ["D4", "G4"], duration: "8n", type: "lead" },
+                { time: "1:0:2", note: ["B4"], duration: "8n", type: "lead" },
+                { time: "1:1:0", note: ["D5", "B5"], duration: "4n", type: "lead" },
+                { time: "1:2:0", note: ["C5"], duration: "8n", type: "lead" },
+                { time: "1:2:2", note: ["B4"], duration: "8n", type: "lead" },
+                { time: "1:3:0", note: ["A4"], duration: "4n", type: "lead" },
+
+                // Bar 3: Puncak Mars Heroik (A Minor & F Major)
+                { time: "2:0:0", note: ["A4", "C5"], duration: "8n", type: "lead" },
+                { time: "2:0:2", note: ["E5"], duration: "8n", type: "lead" },
+                { time: "2:1:0", note: ["A5"], duration: "4n", type: "lead" },
+                { time: "2:2:0", note: ["F4", "A4", "F5"], duration: "4n", type: "lead" },
+                { time: "2:3:0", note: ["G4", "B4", "G5"], duration: "4n", type: "lead" },
+
+                // Bar 4: Resolusi Sukses Misi
+                { time: "3:0:0", note: ["C5", "E5", "C6"], duration: "2n", type: "lead" },
+
+                // Bass Line (Ketukan Mars Muka)
+                { time: "0:0:0", note: "C2", duration: "8n", type: "bass" },
+                { time: "0:1:0", note: "C2", duration: "8n", type: "bass" },
+                { time: "0:2:0", note: "G2", duration: "8n", type: "bass" },
+                { time: "0:3:0", note: "G2", duration: "8n", type: "bass" },
+
+                { time: "1:0:0", note: "G2", duration: "8n", type: "bass" },
+                { time: "1:1:0", note: "G2", duration: "8n", type: "bass" },
+                { time: "1:2:0", note: "B2", duration: "8n", type: "bass" },
+                { time: "1:3:0", note: "D3", duration: "8n", type: "bass" },
+
+                { time: "2:0:0", note: "A2", duration: "8n", type: "bass" },
+                { time: "2:1:0", note: "A2", duration: "8n", type: "bass" },
+                { time: "2:2:0", note: "F2", duration: "8n", type: "bass" },
+                { time: "2:3:0", note: "G2", duration: "8n", type: "bass" },
+
+                { time: "3:0:0", note: "C2", duration: "4n", type: "bass" },
+                { time: "3:2:0", note: "C2", duration: "4n", type: "bass" }
+            ];
+
+            bgmPattern = new Tone.Part((time, value) => {
+                if (value.type === "lead") {
+                    bgmSynth.triggerAttackRelease(value.note, value.duration, time);
+                } else if (value.type === "bass") {
+                    bgmBassSynth.triggerAttackRelease(value.note, value.duration, time);
+                }
+            }, missionMelody);
+
+            bgmPattern.loop = true;
+            bgmPattern.loopEnd = "4m";
+            Tone.Transport.bpm.value = 124; // Tempo lebih gesit & bersemangat
+        }
+
+        function startBGM() {
+            if (!Game.bgmEnabled) return;
+            initAudio();
+            initBGM();
+            if (Tone.context && Tone.context.state !== 'running') {
+                Tone.context.resume();
+            }
+            // Reset posisi waktu ke 0 agar melodi langsung terdegar detik itu juga tanpa jeda birama
+            Tone.Transport.position = 0;
+            if (Tone.Transport.state !== "started") {
+                Tone.Transport.start();
+            }
+            if (bgmPattern && !Game.bgmPlaying) {
+                bgmPattern.start(0);
+                Game.bgmPlaying = true;
+            }
+            updateBgmUI();
+        }
+
+        function stopBGM() {
+            if (bgmPattern && Game.bgmPlaying) {
+                bgmPattern.stop();
+                Game.bgmPlaying = false;
+            }
+            if (Tone.Transport.state === "started") {
+                Tone.Transport.stop();
+            }
+            updateBgmUI();
+        }
+
+        function toggleBGM() {
+            Game.bgmEnabled = !Game.bgmEnabled;
+            if (Game.bgmEnabled) {
+                startBGM();
+            } else {
+                stopBGM();
+            }
+        }
+
+        function updateBgmUI() {
+            const btnIcon = document.getElementById('bgm-icon');
+            const btnBgm = document.getElementById('btn-toggle-bgm');
+            if (btnIcon) {
+                if (Game.bgmEnabled && Game.bgmPlaying) {
+                    btnIcon.innerText = '🎵';
+                    if (btnBgm) btnBgm.title = 'Musik: ON';
+                } else if (Game.bgmEnabled) {
+                    btnIcon.innerText = '🎵';
+                    if (btnBgm) btnBgm.title = 'Musik: READY';
+                } else {
+                    btnIcon.innerText = '🔇';
+                    if (btnBgm) btnBgm.title = 'Musik: OFF';
+                }
+            }
+        }
+
+        function updateFullscreenUI() {
+            const isFS = !!(document.fullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+            const fsIcon = document.getElementById('fs-icon');
+            const btnFs = document.getElementById('btn-toggle-fullscreen');
+            const fsIconsHud = document.querySelectorAll('.fs-icon-hud');
+
+            if (fsIcon) fsIcon.innerText = isFS ? '🗗' : '⛶';
+            if (btnFs) btnFs.title = isFS ? 'Keluar Penuh' : 'Layar Penuh';
+            fsIconsHud.forEach(icon => {
+                icon.innerText = isFS ? '🗗' : '⛶';
+            });
+        }
+
+        function toggleFullscreen() {
+            try {
+                const doc = window.document;
+                const docEl = doc.documentElement;
+
+                const requestFS = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullscreen || docEl.msRequestFullscreen;
+                const cancelFS = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+
+                const isFS = doc.fullscreenElement || doc.mozFullScreenElement || doc.webkitFullscreenElement || doc.msFullscreenElement;
+
+                if (!isFS) {
+                    if (requestFS) {
+                        const promise = requestFS.call(docEl);
+                        if (promise && typeof promise.catch === 'function') {
+                            promise.catch(err => {
+                                console.warn('Layar penuh diblokir oleh kebijakan izin browser/iframe:', err);
+                            });
+                        }
+                    }
+                } else {
+                    if (cancelFS) {
+                        const promise = cancelFS.call(doc);
+                        if (promise && typeof promise.catch === 'function') {
+                            promise.catch(err => {
+                                console.warn('Gagal keluar dari layar penuh:', err);
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('Fitur layar penuh tidak didukung atau diblokir:', err);
+            }
+        }
+
+        function updateFullscreenUI() {
+            const isFS = !!(document.fullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
+            const fsIcon = document.getElementById('fs-icon');
+            const fsStatus = document.getElementById('fs-status');
+            const fsIconsHud = document.querySelectorAll('.fs-icon-hud');
+
+            if (fsIcon) fsIcon.innerText = isFS ? '🗗' : '⛶';
+            if (fsStatus) fsStatus.innerText = isFS ? 'Keluar Penuh' : 'Layar Penuh';
+            fsIconsHud.forEach(icon => {
+                icon.innerText = isFS ? '🗗' : '⛶';
+            });
+        }
+
+        ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach(evt => {
+            document.addEventListener(evt, updateFullscreenUI);
+        });
+
+        function playSound(type) {
+            if (!Game.audioReady) return;
+            try {
+                const now = Tone.now();
+                
+                // Mencegah error collision timestamp di Tone.js
+                if (Game.lastSoundTimes[type] && now - Game.lastSoundTimes[type] < 0.05) {
+                    return; // Skip jika suara yang sama dimainkan di waktu yang hampir bersamaan
+                }
+                Game.lastSoundTimes[type] = now;
+
+                if (type === 'correct') {
+                    synth.triggerAttackRelease(["C5", "E5", "G5"], "8n");
+                } else if (type === 'wrong') {
+                    synth.triggerAttackRelease(["C3", "D#3"], "4n");
+                } else if (type === 'drop') {
+                    dropSynth.triggerAttackRelease("C2", "8n");
+                } else if (type === 'win') {
+                    synth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "2n");
+                }
+            } catch (err) {
+                console.warn("Audio error terskip:", err);
+            }
+        }
+
+        function renderHome() {
+            UI.levelList.innerHTML = '';
+            
+            // Update total bintang di home topbar
+            const homeStars = document.getElementById('home-total-stars');
+            if (homeStars) homeStars.innerText = Game.score;
+
+            // Memastikan backsound aktif jika audio sudah siap dan berada di halaman home
+            if (Game.audioReady && Game.bgmEnabled) {
+                startBGM();
+            }
+
+            // Tombol Mute / Unmute Backsound
+            const btnBgm = document.getElementById('btn-toggle-bgm');
+            if (btnBgm) {
+                btnBgm.onclick = () => {
+                    initAudio();
+                    toggleBGM();
+                };
+            }
+
+            // Tombol Fullscreen Toggle
+            const btnFsHome = document.getElementById('btn-toggle-fullscreen');
+            if (btnFsHome) {
+                btnFsHome.onclick = () => toggleFullscreen();
+            }
+            const btnFsHud = document.getElementById('btn-toggle-fullscreen-hud');
+            if (btnFsHud) {
+                btnFsHud.onclick = () => toggleFullscreen();
+            }
+
+            LEVEL_DATA.forEach((lvl) => {
+                const isLocked = lvl.id > Game.unlockedLevel;
+                const isCompleted = lvl.id < Game.unlockedLevel;
+                
+                const btn = document.createElement('button');
+                
+                // Styling Card Level
+                if (isLocked) {
+                    btn.className = `w-[140px] sm:w-[175px] flex-shrink-0 flex flex-col items-center justify-between p-2.5 sm:p-4 rounded-2xl sm:rounded-3xl transition-all snap-center bg-slate-100/80 border-2 border-slate-300/80 opacity-70 cursor-not-allowed shadow-inner`;
+                } else if (isCompleted) {
+                    btn.className = `w-[140px] sm:w-[175px] flex-shrink-0 flex flex-col items-center justify-between p-2.5 sm:p-4 rounded-2xl sm:rounded-3xl transition-all snap-center bg-gradient-to-b from-white to-emerald-50/80 shadow-md hover:shadow-xl hover:-translate-y-1 border-2 border-emerald-300 cursor-pointer group`;
+                } else {
+                    // Level aktif / saat ini
+                    btn.className = `w-[140px] sm:w-[175px] flex-shrink-0 flex flex-col items-center justify-between p-2.5 sm:p-4 rounded-2xl sm:rounded-3xl transition-all snap-center bg-gradient-to-b from-white to-sky-50 shadow-lg hover:shadow-xl hover:-translate-y-1 border-3 sm:border-4 border-blue-400 cursor-pointer group ring-2 sm:ring-4 ring-blue-200/50 relative overflow-hidden`;
+                }
+
+                btn.disabled = isLocked;
+                
+                btn.innerHTML = `
+                    ${!isLocked && !isCompleted ? '<div class="absolute -top-10 -right-10 w-20 h-20 bg-blue-400/20 rounded-full blur-lg pointer-events-none"></div>' : ''}
+                    
+                    <!-- Header Level Pill -->
+                    <div class="flex items-center justify-between w-full mb-0.5 sm:mb-1">
+                        <span class="text-[9px] sm:text-[11px] font-black px-2 py-0.5 rounded-full ${isLocked ? 'bg-slate-200 text-slate-500' : isCompleted ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-500 text-white shadow-sm'} tracking-wider uppercase">
+                            LVL ${lvl.id}
+                        </span>
+                        <span class="text-xs">
+                            ${isLocked ? '🔒' : isCompleted ? '✅' : '🔥'}
+                        </span>
+                    </div>
+
+                    <!-- Icon Container -->
+                    <div class="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl ${isLocked ? 'bg-slate-200 border-2 border-slate-300' : 'bg-gradient-to-br from-sky-100 to-indigo-100 border-2 border-sky-200 group-hover:scale-105'} flex items-center justify-center text-xl sm:text-2xl my-1 shadow-sm transition-transform duration-300 shrink-0">
+                        ${isLocked ? '🔒' : lvl.icon}
+                    </div>
+
+                    <!-- Judul & Deskripsi -->
+                    <div class="w-full text-center my-0.5">
+                        <div class="font-black ${isLocked ? 'text-slate-400' : 'text-slate-800'} text-xs sm:text-sm leading-tight truncate mb-0.5">
+                            ${lvl.title}
+                        </div>
+                        <div class="text-[9px] sm:text-[11px] text-slate-500 font-bold h-6 sm:h-7 text-center leading-snug line-clamp-2">
+                            ${lvl.desc}
+                        </div>
+                    </div>
+
+                    <!-- Action Indicator Button -->
+                    <div class="w-full mt-1">
+                        ${isLocked ? 
+                            '<div class="w-full bg-slate-200 text-slate-400 font-bold py-1 rounded-lg text-[9px] sm:text-[11px] text-center uppercase tracking-wider">Terkunci</div>' : 
+                          isCompleted ? 
+                            '<div class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-1 rounded-lg text-[9px] sm:text-[11px] text-center shadow-[0_2px_0_#059669] transition-all">Main Lagi 🔄</div>' : 
+                            '<div class="w-full bg-blue-500 group-hover:bg-blue-600 text-white font-black py-1.5 rounded-xl text-xs sm:text-xs text-center shadow-[0_3px_0_#1d4ed8] active:translate-y-[2px] transition-all flex items-center justify-center gap-1">MULAI <span class="text-[10px]">▶</span></div>'
+                        }
+                    </div>
+                `;
+                
+                if (!isLocked) {
+                    btn.addEventListener('click', () => {
+                        initAudio();
+                        startLevel(lvl.id);
+                    });
+                }
+                UI.levelList.appendChild(btn);
+            });
+
+            // Event handler untuk tombol panah scroll
+            const btnLeft = document.getElementById('btn-scroll-left');
+            const btnRight = document.getElementById('btn-scroll-right');
+            if (btnLeft && btnRight) {
+                btnLeft.onclick = () => UI.levelList.scrollBy({ left: -220, behavior: 'smooth' });
+                btnRight.onclick = () => UI.levelList.scrollBy({ left: 220, behavior: 'smooth' });
+            }
+
+            updateHUD();
+        }
+
+        function updateHUD() {
+            UI.valLives.innerText = Game.lives;
+            UI.valScore.innerText = Game.score;
+            UI.valCoins.innerText = Game.coins;
+            UI.valBadges.innerText = Game.badges;
+        }
+
+        function startTimer(seconds, onTimeout) {
+            clearInterval(Game.timer);
+            Game.timeLeft = seconds;
+            UI.timerContainer.classList.remove('bg-red-100', 'text-red-700', 'animate-pulse');
+            UI.timerContainer.classList.add('bg-slate-100', 'text-slate-700');
+            
+            const updateUI = () => {
+                const m = Math.floor(Game.timeLeft / 60).toString().padStart(2, '0');
+                const s = (Game.timeLeft % 60).toString().padStart(2, '0');
+                UI.valTime.innerText = `${m}:${s}`;
+                
+                if (Game.timeLeft <= 10) {
+                    UI.timerContainer.classList.remove('bg-slate-100', 'text-slate-700');
+                    UI.timerContainer.classList.add('bg-red-100', 'text-red-700', 'animate-pulse');
+                }
+            };
+            
+            updateUI();
+            Game.timer = setInterval(() => {
+                Game.timeLeft--;
+                updateUI();
+                if (Game.timeLeft <= 0) {
+                    clearInterval(Game.timer);
+                    onTimeout();
+                }
+            }, 1000);
+        }
+
+        function showFeedback(isSuccess, points, msg) {
+            clearInterval(Game.timer);
+            UI.modal.classList.remove('hidden');
+            UI.modal.classList.add('flex');
+            
+            setTimeout(() => {
+                UI.modalContent.classList.remove('scale-90', 'opacity-0');
+                UI.modalContent.classList.add('scale-100', 'opacity-100');
+            }, 10);
+
+            if (isSuccess) {
+                playSound('correct');
+                UI.feedbackIcon.innerText = ['🎉','⭐','🏆','🔥'][Math.floor(Math.random()*4)];
+                UI.feedbackTitle.innerText = "Luar Biasa!";
+                UI.feedbackTitle.className = "text-3xl title-font mb-2 text-green-600";
+                UI.feedbackMsg.innerText = msg || `+${points} Poin & +10 Koin!`;
+                
+                Game.score += points;
+                Game.coins += 10;
+                
+                if (Game.currentLevel.id === Game.unlockedLevel) {
+                    Game.unlockedLevel++;
+                    Game.badges++; // Tambah badge jika menyelesaikan level baru
+                }
+                
+                UI.btnNext.innerText = "LANJUT";
+                UI.btnNext.className = "w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 sm:py-4 rounded-xl text-lg sm:text-xl shadow-[0_4px_0_#16a34a] active:translate-y-[4px] active:shadow-none transition-all";
+                UI.btnNext.onclick = () => { 
+                    closeFeedback(); 
+                    renderHome(); 
+                    UI.home.classList.remove('hidden'); 
+                    UI.game.classList.add('hidden'); 
+                    UI.hud.classList.add('hidden'); 
+                    startBGM();
+                };
+            } else {
+                playSound('wrong');
+                Game.lives--;
+                
+                if (Game.lives <= 0) {
+                    // Game Over condition
+                    UI.feedbackIcon.innerText = '💀';
+                    UI.feedbackTitle.innerText = "GAME OVER";
+                    UI.feedbackTitle.className = "text-3xl title-font mb-2 text-red-600";
+                    UI.feedbackMsg.innerText = msg || "Nyawa kamu habis! Permainan diulang dari awal.";
+                    
+                    // Reset lives and score
+                    Game.lives = 3;
+                    Game.score = 0;
+                    
+                    UI.btnNext.innerText = "KE MENU UTAMA";
+                    UI.btnNext.className = "w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 sm:py-4 rounded-xl text-lg sm:text-xl shadow-[0_4px_0_#dc2626] active:translate-y-[4px] active:shadow-none transition-all";
+                    UI.btnNext.onclick = () => { 
+                        closeFeedback(); 
+                        renderHome(); 
+                        UI.home.classList.remove('hidden'); 
+                        UI.game.classList.add('hidden'); 
+                        UI.hud.classList.add('hidden'); 
+                        startBGM();
+                    };
+                } else {
+                    // Standard retry condition
+                    UI.feedbackIcon.innerText = '❌';
+                    UI.feedbackTitle.innerText = "Oops!";
+                    UI.feedbackTitle.className = "text-3xl title-font mb-2 text-red-600";
+                    UI.feedbackMsg.innerText = msg || "Coba lagi ya!";
+                    
+                    UI.btnNext.innerText = "ULANGI";
+                    UI.btnNext.className = "w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 sm:py-4 rounded-xl text-lg sm:text-xl shadow-[0_4px_0_#dc2626] active:translate-y-[4px] active:shadow-none transition-all";
+                    UI.btnNext.onclick = () => { 
+                        closeFeedback(); 
+                        startLevel(Game.currentLevel.id); 
+                    };
+                }
+            }
+            updateHUD();
+        }
+
+        function closeFeedback() {
+            UI.modalContent.classList.remove('scale-100', 'opacity-100');
+            UI.modalContent.classList.add('scale-90', 'opacity-0');
+            setTimeout(() => {
+                UI.modal.classList.remove('flex');
+                UI.modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            Game.scene = new THREE.Scene();
+            
+            Game.camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+            Game.camera.position.set(6, 6, 8);
+            Game.camera.lookAt(0, 0, 0);
+
+            Game.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            Game.renderer.setSize(container.clientWidth, container.clientHeight);
+            Game.renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(Game.renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            Game.scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(5, 10, 7);
+            Game.scene.add(dirLight);
+
+            const gridHelper = new THREE.GridHelper(10, 10, 0x888888, 0xcccccc);
+            gridHelper.position.y = -0.5;
+            Game.scene.add(gridHelper);
+
+            // Interaksi Touch & Mouse Drag untuk Rotasi Tampilan 3D
+            const startDrag = (e) => {
+                isDraggingCanvas = true;
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                prevMousePos = { x: clientX, y: clientY };
+            };
+
+            const moveDrag = (e) => {
+                if (!isDraggingCanvas || !Game.scene) return;
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                if (clientX === undefined || clientY === undefined) return;
+
+                const deltaX = clientX - prevMousePos.x;
+                const deltaY = clientY - prevMousePos.y;
+
+                Game.scene.rotation.y += deltaX * 0.01;
+                Game.scene.rotation.x = Math.max(-0.6, Math.min(1.2, Game.scene.rotation.x + deltaY * 0.008));
+
+                prevMousePos = { x: clientX, y: clientY };
+            };
+
+            const endDrag = () => { isDraggingCanvas = false; };
+
+            container.addEventListener('mousedown', startDrag);
+            container.addEventListener('mousemove', moveDrag);
+            window.addEventListener('mouseup', endDrag);
+
+            container.addEventListener('touchstart', startDrag, { passive: true });
+            container.addEventListener('touchmove', moveDrag, { passive: true });
+            window.addEventListener('touchend', endDrag);
+
+            // Tombol Pintas Kamera
+            document.getElementById('btn-view-iso').onclick = () => {
+                if (Game.scene && Game.camera) {
+                    Game.scene.rotation.set(0, Math.PI / 4, 0);
+                    Game.camera.lookAt(0, 0, 0);
+                }
+            };
+            document.getElementById('btn-view-top').onclick = () => {
+                if (Game.scene && Game.camera) {
+                    Game.scene.rotation.set(Math.PI / 2.5, 0, 0);
+                    Game.camera.lookAt(0, 0, 0);
+                }
+            };
+
+            // Responsive Canvas using ResizeObserver
+            const resizeObserver = new ResizeObserver(() => {
+                if(Game.camera && Game.renderer && container.clientWidth > 0){
+                    Game.camera.aspect = container.clientWidth / container.clientHeight;
+                    Game.camera.updateProjectionMatrix();
+                    Game.renderer.setSize(container.clientWidth, container.clientHeight);
+                }
+            });
+            resizeObserver.observe(container);
+
+            animate3D();
+        }
+
+        function clearScene() {
+            Game.blocks.forEach(b => Game.scene.remove(b.mesh));
+            Game.blocks = [];
+            if (Game.ghostBlocks) {
+                Game.ghostBlocks.forEach(g => Game.scene.remove(g));
+            }
+            Game.ghostBlocks = [];
+        }
+
+        function animate3D() {
+            Game.animationId = requestAnimationFrame(animate3D);
+            
+            let isMoving = false;
+            Game.blocks.forEach(block => {
+                if (block.mesh.position.y > block.targetY) {
+                    block.mesh.position.y -= 0.3; // Kecepatan jatuh
+                    isMoving = true;
+                    if (block.mesh.position.y <= block.targetY) {
+                        block.mesh.position.y = block.targetY;
+                        if (!block.landed) {
+                            playSound('drop');
+                            block.landed = true;
+                            // Efek pantulan kecil
+                            block.mesh.scale.y = 0.8;
+                            block.mesh.scale.x = 1.1;
+                            setTimeout(() => {
+                                if(block.mesh) { block.mesh.scale.set(1,1,1); }
+                            }, 100);
+                        }
+                    }
+                }
+            });
+
+            // Rotasi perlahan hanya jika user tidak sedang memutar manual
+            if (Game.scene && !isDraggingCanvas) {
+                Game.scene.rotation.y += 0.002;
+            }
+
+            if(Game.renderer && Game.scene && Game.camera) {
+                Game.renderer.render(Game.scene, Game.camera);
+            }
+        }
+
+        function createCube(x, targetY, z, color = 0x3b82f6) {
+            const geometry = new THREE.BoxGeometry(0.95, 0.95, 0.95);
+            
+            const edges = new THREE.EdgesGeometry(geometry);
+            const edgeMaterial = new THREE.LineBasicMaterial({ 
+                color: 0xffffff, 
+                linewidth: 2,
+                transparent: Game.xrayMode,
+                opacity: Game.xrayMode ? 0.7 : 1.0
+            });
+            const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+
+            const material = new THREE.MeshPhongMaterial({ 
+                color: color,
+                shininess: 60,
+                specular: 0x222222,
+                transparent: Game.xrayMode,
+                opacity: Game.xrayMode ? 0.35 : 1.0
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.add(edgeLines);
+            
+            // Mulai dari atas (animasi jatuh)
+            mesh.position.set(x, targetY + 10 + Math.random() * 5, z);
+            
+            Game.scene.add(mesh);
+            Game.blocks.push({ mesh, targetY, landed: false });
+        }
+
+        // Fungsi membuat rangka transparan (ghost) untuk kubus yang hilang
+        function createGhostCube(x, y, z) {
+            const geometry = new THREE.BoxGeometry(0.92, 0.92, 0.92);
+            
+            const edges = new THREE.EdgesGeometry(geometry);
+            const edgeMaterial = new THREE.LineDashedMaterial({ 
+                color: 0xef4444, 
+                linewidth: 2,
+                scale: 1,
+                dashSize: 0.2,
+                gapSize: 0.1 
+            });
+            const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+            edgeLines.computeLineDistances();
+
+            const material = new THREE.MeshBasicMaterial({ 
+                color: 0xf87171,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.add(edgeLines);
+            mesh.position.set(x, y, z);
+            
+            Game.scene.add(mesh);
+            if (!Game.ghostBlocks) Game.ghostBlocks = [];
+            Game.ghostBlocks.push(mesh);
+        }
+
+        function drawShape(length, width, height, opts = {}) {
+            clearScene();
+            const { xOff = 0, yOff = 0, zOff = 0, missing = [], color = 0x3b82f6, scale = 1, showGhosts = false } = opts;
+            
+            // Adjust camera berdasarkan ukuran bentuk
+            const maxDim = Math.max(length, width, height);
+            Game.camera.position.set(maxDim * 1.5 * scale, maxDim * 1.5 * scale, maxDim * 1.8 * scale);
+            Game.camera.lookAt(0, height/2, 0);
+
+            const offsetX = (length - 1) / 2;
+            const offsetZ = (width - 1) / 2;
+
+            for (let y = 0; y < height; y++) {
+                for (let z = 0; z < width; z++) {
+                    for (let x = 0; x < length; x++) {
+                        const isMissing = missing.some(m => m[0]===x && m[1]===y && m[2]===z);
+                        const px = (x - offsetX) + xOff;
+                        const py = y + yOff;
+                        const pz = (z - offsetZ) + zOff;
+                        
+                        if (!isMissing) {
+                            createCube(px, py, pz, color);
+                        } else if (showGhosts) {
+                            createGhostCube(px, py, pz);
+                        }
+                    }
+                }
+            }
+        }
+
+        function startLevel(id) {
+            Game.currentLevel = LEVEL_DATA.find(l => l.id === id);
+            Game.xrayMode = false; // Reset mode X-Ray
+            // Musik latar belakang tetap berjalan lancar saat masuk ke level (stopBGM dihapus)
+            UI.home.classList.add('hidden');
+            UI.game.classList.remove('hidden');
+            UI.hud.classList.remove('hidden');
+            
+            UI.levelTitle.innerText = `Lv ${id}: ${Game.currentLevel.title}`;
+            UI.levelUi.innerHTML = '';
+            
+            if(!Game.scene) init3D();
+            clearScene();
+            updateHUD();
+
+            startTimer(Game.currentLevel.time, () => showFeedback(false, 0, "Waktu Habis!"));
+
+            // Paksa reflow container
+            setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
+
+            switch(id) {
+                case 1: playLevel1(); break;
+                case 2: playLevel2(); break;
+                case 3: playLevel3(); break;
+                case 4: playLevel4(); break;
+                case 5: playLevel5(); break;
+                case 6: playLevel6(); break;
+            }
+        }
+
+        UI.btnBack.addEventListener('click', () => {
+            clearInterval(Game.timer);
+            UI.home.classList.remove('hidden');
+            UI.game.classList.add('hidden');
+            UI.hud.classList.add('hidden');
+            renderHome();
+            startBGM(); // Nyalakan backsound saat kembali ke home
+        });
+
+        function playLevel1() {
+            // Bank soal acak
+            const questionPool = [
+                { 
+                    type: 'KUBUS', 
+                    l: 3, w: 3, h: 3, color: 0xef4444, // Merah
+                    text: "Bangunan ini memiliki 6 sisi, 12 rusuk, dan 8 titik sudut serta semua sisinya berbentuk PERSEGI. Apakah jenis bangunan ini?"
+                },
+                { 
+                    type: 'BALOK', 
+                    l: 4, w: 2, h: 3, color: 0x3b82f6, // Biru
+                    text: "Bangunan ini memiliki 6 sisi, 12 rusuk, dan 8 titik sudut serta setiap sisinya berbentuk PERSEGI PANJANG. Apakah jenis bangunan ini?"
+                },
+                { 
+                    type: 'KUBUS', 
+                    l: 2, w: 2, h: 2, color: 0xf59e0b, // Kuning
+                    text: "Lihat bentuknya. Semua sisinya sama panjang (persegi). 6 sisi, 12 rusuk, 8 sudut. Bangun apakah ini?"
+                },
+                { 
+                    type: 'BALOK', 
+                    l: 5, w: 2, h: 2, color: 0x10b981, // Hijau
+                    text: "Ukurannya panjang ke satu sisi (persegi panjang). Punya 6 sisi, 12 rusuk, 8 sudut. Ini disebut?"
+                }
+            ];
+
+            // Acak dan ambil 2 soal
+            const shuffledPool = questionPool.sort(() => 0.5 - Math.random());
+            const selectedQuestions = shuffledPool.slice(0, 2);
+
+            let stage = 0;
+
+            const renderStage = () => {
+                const currentQ = selectedQuestions[stage];
+                drawShape(currentQ.l, currentQ.w, currentQ.h, { color: currentQ.color, scale: 1.2 });
+                if (Game.scene) Game.scene.rotation.y = Math.PI / 4; // Reset rotasi menghadap serong
+
+                UI.levelUi.innerHTML = `
+                    <div class="bg-blue-50 p-4 sm:p-6 rounded-2xl border border-blue-200 text-center shadow-sm flex flex-col justify-between h-full">
+                        <div>
+                            <p class="font-bold text-slate-500 mb-2 text-xs sm:text-sm">Tebakan ${stage + 1} dari 2</p>
+                            <p class="text-slate-700 font-bold mb-4 text-sm sm:text-base leading-relaxed">${currentQ.text}</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3" id="options-container"></div>
+                    </div>
+                `;
+
+                const container = document.getElementById('options-container');
+                ['KUBUS', 'BALOK'].forEach(choice => {
+                    const btn = document.createElement('button');
+                    btn.className = "bg-blue-500 hover:bg-blue-600 text-white font-black py-3 sm:py-4 rounded-xl text-lg sm:text-xl shadow-[0_4px_0_#1d4ed8] active:translate-y-[4px] active:shadow-none transition-all";
+                    btn.innerText = choice;
+                    btn.onclick = () => {
+                        if (choice === currentQ.type) {
+                            playSound('correct');
+                            if (stage === selectedQuestions.length - 1) {
+                                showFeedback(true, 100, "Hebat! Kamu bisa mengenali Kubus & Balok!");
+                            } else {
+                                stage++;
+                                renderStage();
+                            }
+                        } else {
+                            showFeedback(false, 0, `Kurang tepat. Bentuk tadi adalah ${currentQ.type}.`);
+                        }
+                    };
+                    container.appendChild(btn);
+                });
+            };
+
+            renderStage();
+        }
+
+        function playLevel2() {
+            const generateQuestion = () => {
+                return { 
+                    l: Math.floor(Math.random()*4)+2, 
+                    w: Math.floor(Math.random()*3)+2, 
+                    h: Math.floor(Math.random()*3)+2 
+                };
+            };
+            
+            const questions = Array.from({length: 5}, generateQuestion);
+            let stage = 0;
+
+            const renderStage = () => {
+                const q = questions[stage];
+                drawShape(q.l, q.w, q.h, { color: 0x8b5cf6, scale: 1.2 });
+
+                UI.levelUi.innerHTML = `
+                    <div class="bg-indigo-50 p-4 sm:p-6 rounded-2xl border border-indigo-200 text-center shadow-sm">
+                        <p class="font-bold text-slate-500 mb-2 text-xs sm:text-sm">Soal ${stage + 1} dari 5</p>
+                        <p class="mb-4 text-slate-600 text-sm sm:text-base">Perhatikan susunan kubus satuan di sebelah kiri.</p>
+                        <div class="flex justify-center space-x-2 sm:space-x-4 mb-4 text-xs sm:text-sm font-bold text-indigo-700 bg-white py-2 px-3 rounded-lg shadow-inner">
+                            <div>P: ${q.l}</div><div>|</div>
+                            <div>L: ${q.w}</div><div>|</div>
+                            <div>T: ${q.h}</div>
+                        </div>
+                        <p class="font-bold mb-3 sm:mb-4 text-lg sm:text-xl text-slate-800">Total kubus satuan?</p>
+                        <div class="flex space-x-2 justify-center">
+                            <input type="number" id="ans-input" class="w-20 sm:w-24 border-2 sm:border-4 border-indigo-300 rounded-xl p-2 text-xl sm:text-2xl text-center font-black focus:outline-none focus:border-indigo-500 text-indigo-700" placeholder="?">
+                            <button id="btn-submit" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold px-4 sm:px-6 py-2 rounded-xl shadow-[0_4px_0_#4338ca] active:translate-y-[4px] active:shadow-none transition-all text-base sm:text-lg">JAWAB</button>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('btn-submit').addEventListener('click', () => {
+                    const ans = parseInt(document.getElementById('ans-input').value);
+                    const correct = q.l * q.w * q.h;
+                    if (ans === correct) {
+                        playSound('correct');
+                        if (stage === 4) {
+                            showFeedback(true, 150, "Luar Biasa! Semua soal hitungan benar!");
+                        } else {
+                            stage++;
+                            renderStage();
+                        }
+                    } else {
+                        showFeedback(false, 0, `Salah! Jawabannya ${q.l} × ${q.w} × ${q.h} = ${correct}`);
+                    }
+                });
+            };
+            
+            renderStage();
+        }
+
+        function playLevel3() {
+            clearScene();
+            Game.camera.position.set(8, 8, 8);
+            
+            // 3 Soal Tantangan Target Bangunan
+            const targets = [
+                { l: 3, w: 2, h: 2 },
+                { l: 4, w: 3, h: 2 },
+                { l: 5, w: 2, h: 3 }
+            ];
+            let stage = 0;
+
+            const renderStage = () => {
+                const target = targets[stage];
+                let current = { l: 1, w: 1, h: 1 };
+
+                window.mod = function(dim, val) {
+                    current[dim] = Math.max(1, Math.min(5, current[dim] + val));
+                    const inputEl = document.getElementById(`in-${dim}`);
+                    if (inputEl) inputEl.value = current[dim];
+                    const countEl = document.getElementById('cube-count');
+                    if (countEl) countEl.innerText = current.l * current.w * current.h;
+                    drawShape(current.l, current.w, current.h, { color: 0xf97316 });
+                };
+
+                UI.levelUi.innerHTML = `
+                    <div class="bg-orange-50 p-4 sm:p-6 rounded-2xl border border-orange-200 shadow-sm flex flex-col h-full justify-between">
+                        <div>
+                            <!-- Progress Bar & Indicator 3 Soal -->
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold text-slate-500 text-xs sm:text-sm">Soal ${stage + 1} dari ${targets.length}</span>
+                                <div class="flex space-x-1">
+                                    ${targets.map((_, idx) => `
+                                        <div class="w-3.5 h-3.5 rounded-full ${idx < stage ? 'bg-orange-500 text-white flex items-center justify-center text-[9px] font-bold' : idx === stage ? 'bg-amber-400 ring-2 ring-amber-300 animate-pulse' : 'bg-slate-200'}">${idx < stage ? '✓' : ''}</div>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between mb-3 bg-white p-3 rounded-xl border border-orange-100 shadow-sm">
+                                <div>
+                                    <p class="text-xs text-orange-600 font-bold">Target Susunan:</p>
+                                    <p class="text-2xl sm:text-3xl font-black title-font text-slate-800">${target.l} × ${target.w} × ${target.h}</p>
+                                </div>
+                                <div class="text-center bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-200">
+                                    <span class="text-[10px] block text-slate-500 font-bold">Total Kubus</span>
+                                    <span id="cube-count" class="font-black text-lg sm:text-2xl text-orange-500">1</span>
+                                </div>
+                            </div>
+                            
+                            <p class="text-xs sm:text-sm font-bold text-center mb-3 text-slate-700">Atur ukuran P, L, T untuk membangun target!</p>
+                            
+                            <div class="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
+                                ${['l', 'w', 'h'].map(dim => `
+                                <div class="text-center">
+                                    <label class="text-[10px] sm:text-xs font-bold text-slate-500 block mb-1 uppercase">${dim === 'l' ? 'Panjang' : dim === 'w' ? 'Lebar' : 'Tinggi'}</label>
+                                    <input type="number" id="in-${dim}" value="1" class="w-full text-center border-2 border-slate-200 rounded-lg py-1 font-black text-lg text-slate-700" readonly>
+                                    <div class="flex mt-1 space-x-1">
+                                        <button class="flex-1 bg-slate-200 hover:bg-slate-300 rounded md py-1 font-bold text-sm" onclick="mod('${dim}', -1)">-</button>
+                                        <button class="flex-1 bg-slate-200 hover:bg-slate-300 rounded md py-1 font-bold text-sm" onclick="mod('${dim}', 1)">+</button>
+                                    </div>
+                                </div>`).join('')}
+                            </div>
+                        </div>
+                        
+                        <button id="btn-build" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 sm:py-3.5 rounded-xl shadow-[0_4px_0_#c2410c] active:translate-y-[4px] active:shadow-none transition-all title-font text-lg sm:text-xl">BANGUN!</button>
+                    </div>
+                `;
+                
+                drawShape(1, 1, 1, { color: 0xf97316 });
+
+                document.getElementById('btn-build').addEventListener('click', () => {
+                    if (current.l === target.l && current.w === target.w && current.h === target.h) {
+                        playSound('correct');
+                        if (stage === targets.length - 1) {
+                            showFeedback(true, 200, "Hebat! Kamu berhasil menyelesaikan 3 target susunan balok!");
+                        } else {
+                            stage++;
+                            renderStage();
+                        }
+                    } else {
+                        showFeedback(false, 0, `Ukuran belum sesuai target ${target.l} × ${target.w} × ${target.h}. (Ukuranmu: ${current.l} × ${current.w} × ${current.h})`);
+                    }
+                });
+            };
+
+            renderStage();
+        }
+
+        function playLevel4() {
+            // Skema 5 tahap balok bolong
+            const scenarios = [
+                { l: 3, w: 3, h: 2, m: [[0,1,0],[1,1,1],[2,1,2]] }, // Hilang 3
+                { l: 4, w: 2, h: 3, m: [[1,2,0],[2,2,0],[1,2,1],[2,2,1]] }, // Hilang 4
+                { l: 3, w: 3, h: 3, m: [[0,2,0],[0,2,2],[2,2,0],[2,2,2],[1,1,1]] }, // Hilang 5
+                { l: 4, w: 3, h: 2, m: [[0,1,0],[0,1,1],[0,1,2],[3,1,0],[3,1,1],[3,1,2]] }, // Hilang 6
+                { l: 4, w: 4, h: 3, m: [[1,2,1],[1,2,2],[2,2,1],[2,2,2],[1,1,1],[1,1,2],[2,1,1],[2,1,2]] } // Hilang 8 (Inti)
+            ];
+
+            let stage = 0;
+
+            const renderStage = () => {
+                const q = scenarios[stage];
+                const totalHarusnya = q.l * q.w * q.h;
+                const jumlahHilang = q.m.length;
+
+                drawShape(q.l, q.w, q.h, { missing: q.m, color: 0xef4444, scale: 1.1, showGhosts: true });
+
+                UI.levelUi.innerHTML = `
+                    <div class="bg-red-50 p-3 sm:p-5 rounded-2xl border border-red-200 text-center shadow-sm flex flex-col justify-between h-full">
+                        <div>
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="font-bold text-slate-500 text-xs sm:text-sm">Tahap ${stage + 1} dari 5</span>
+                                <button id="btn-xray" class="text-xs font-bold px-3 py-1.5 rounded-full transition-all border ${Game.xrayMode ? 'bg-red-500 text-white border-red-600 shadow-sm' : 'bg-white text-red-600 border-red-200 hover:bg-red-100'}">
+                                    ${Game.xrayMode ? '👁️ Mode X-Ray: AKTIF' : '🔍 Mode X-Ray (Transparan)'}
+                                </button>
+                            </div>
+
+                            <p class="font-bold text-slate-700 mb-2 text-xs sm:text-base leading-relaxed">
+                                Berapa kubus yang <span class="text-red-500 font-black">hilang</span> (ruang bergaris merah) pada balok utuh (P=${q.l}, L=${q.w}, T=${q.h})?
+                            </p>
+                            <p class="text-[11px] sm:text-xs text-slate-500 mb-3 bg-white/80 py-1 px-2 rounded-lg inline-block">
+                                💡 Petunjuk: Geser gambar 3D di kiri atau nyalakan <b>Mode X-Ray</b> untuk melihat bagian dalam!
+                            </p>
+                        </div>
+                        
+                        <div>
+                            <div class="flex justify-center mb-3 sm:mb-4">
+                                <input type="number" id="missing-input" class="w-24 sm:w-32 border-2 sm:border-4 border-red-300 rounded-xl p-1.5 sm:p-2.5 text-2xl sm:text-3xl text-center font-black text-red-600 focus:outline-none focus:border-red-500 shadow-inner" placeholder="?">
+                            </div>
+                            
+                            <button id="btn-submit-l4" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 sm:py-3.5 rounded-xl shadow-[0_4px_0_#b91c1c] active:translate-y-[4px] active:shadow-none transition-all text-base sm:text-lg title-font">
+                                KIRIM JAWABAN
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                // Toggle X-Ray mode
+                document.getElementById('btn-xray').onclick = () => {
+                    Game.xrayMode = !Game.xrayMode;
+                    renderStage();
+                };
+
+                document.getElementById('btn-submit-l4').addEventListener('click', () => {
+                    const ans = parseInt(document.getElementById('missing-input').value);
+                    if (ans === jumlahHilang) {
+                        playSound('correct');
+                        // Animasi mengisi yang kosong dengan kubus hijau
+                        q.m.forEach(pos => {
+                            createCube((pos[0] - (q.l-1)/2), pos[1], (pos[2] - (q.w-1)/2), 0x22c55e);
+                        });
+                        
+                        setTimeout(() => {
+                            if (stage === 4) {
+                                showFeedback(true, 250, "Luar Biasa! Insting ruangmu sangat tajam!");
+                            } else {
+                                stage++;
+                                renderStage();
+                            }
+                        }, 1200);
+                    } else {
+                        showFeedback(false, 0, `Kurang tepat. Ada ${jumlahHilang} kubus yang hilang.`);
+                    }
+                });
+            };
+
+            renderStage();
+        }
+
+        function playLevel5() {
+            const targets = [12, 16, 20, 24, 30]; // 5 Nomor Tantangan (Target Kubus)
+            let stage = 0;
+            
+            clearScene();
+            
+            const renderStage = () => {
+                const targetBlocks = targets[stage];
+                
+                UI.levelUi.innerHTML = `
+                    <div class="bg-teal-50 p-4 sm:p-6 rounded-2xl border border-teal-200 text-center shadow-sm flex flex-col h-full justify-between">
+                        <div>
+                            <!-- Progress Bar & Indicator 5 Nomor -->
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold text-slate-500 text-xs sm:text-sm">Tantangan ${stage + 1} dari ${targets.length}</span>
+                                <div class="flex space-x-1">
+                                    ${targets.map((_, idx) => `
+                                        <div class="w-3.5 h-3.5 rounded-full ${idx < stage ? 'bg-teal-500 text-white flex items-center justify-center text-[9px] font-bold' : idx === stage ? 'bg-amber-400 ring-2 ring-amber-300 animate-pulse' : 'bg-slate-200'}">${idx < stage ? '✓' : ''}</div>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <h3 class="text-base sm:text-xl font-bold mb-1 text-slate-700">Bangun balok menggunakan TEPAT:</h3>
+                            <div class="text-3xl sm:text-4xl font-black title-font text-teal-600 mb-3 sm:mb-4 animate-pulse">${targetBlocks} KUBUS</div>
+                            
+                            <p class="text-[11px] sm:text-xs text-slate-500 mb-3 bg-white/80 py-1 px-2 rounded-lg inline-block">
+                                💡 Masukkan P, L, T agar P × L × T = <b>${targetBlocks}</b>
+                            </p>
+
+                            <div class="flex space-x-2 sm:space-x-4 mb-3">
+                                <div class="flex-1">
+                                    <label class="text-xs font-bold text-slate-500 block mb-1">Panjang (P)</label>
+                                    <input type="number" id="c-l" min="1" max="10" class="live-input w-full border-2 border-teal-300 rounded-lg p-2 text-xl text-center font-bold text-slate-700" placeholder="?">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="text-xs font-bold text-slate-500 block mb-1">Lebar (L)</label>
+                                    <input type="number" id="c-w" min="1" max="10" class="live-input w-full border-2 border-teal-300 rounded-lg p-2 text-xl text-center font-bold text-slate-700" placeholder="?">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="text-xs font-bold text-slate-500 block mb-1">Tinggi (T)</label>
+                                    <input type="number" id="c-h" min="1" max="10" class="live-input w-full border-2 border-teal-300 rounded-lg p-2 text-xl text-center font-bold text-slate-700" placeholder="?">
+                                </div>
+                            </div>
+                            <div id="toast-msg" class="hidden text-xs sm:text-sm font-bold p-2 rounded-xl transition-all"></div>
+                        </div>
+                        
+                        <button id="btn-challenge" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 sm:py-4 rounded-xl shadow-[0_4px_0_#0f766e] active:translate-y-[4px] active:shadow-none transition-all text-base sm:text-xl title-font">
+                            BUKTIKAN!
+                        </button>
+                    </div>
+                `;
+
+                // Live preview 3D
+                const inputs = document.querySelectorAll('.live-input');
+                inputs.forEach(input => {
+                    input.addEventListener('input', () => {
+                        const l = parseInt(document.getElementById('c-l').value) || 0;
+                        const w = parseInt(document.getElementById('c-w').value) || 0;
+                        const h = parseInt(document.getElementById('c-h').value) || 0;
+                        
+                        if(l > 0 && w > 0 && h > 0 && l*w*h <= 100) {
+                            drawShape(l, w, h, { color: 0x14b8a6, scale: 0.8 });
+                        }
+                    });
+                });
+
+                document.getElementById('btn-challenge').addEventListener('click', () => {
+                    const l = parseInt(document.getElementById('c-l').value) || 0;
+                    const w = parseInt(document.getElementById('c-w').value) || 0;
+                    const h = parseInt(document.getElementById('c-h').value) || 0;
+                    
+                    if(l <= 0 || w <= 0 || h <= 0) {
+                        const btn = document.getElementById('btn-challenge');
+                        const origText = btn.innerText;
+                        btn.innerText = "Isi semua angka (minimal 1)!";
+                        btn.classList.add('bg-red-500');
+                        setTimeout(() => {
+                            btn.innerText = origText;
+                            btn.classList.remove('bg-red-500');
+                        }, 2000);
+                        return;
+                    }
+
+                    drawShape(l, w, h, { color: 0x14b8a6, scale: 0.8 });
+
+                    // Beri jeda animasi jatuh kubus
+                    setTimeout(() => {
+                        const total = l * w * h;
+                        if (total === targetBlocks) {
+                            playSound('correct');
+                            const toast = document.getElementById('toast-msg');
+                            if (toast) {
+                                toast.className = "text-xs sm:text-sm font-bold p-2 rounded-xl bg-green-100 text-green-700 border border-green-300 mb-2 block animate-bounce";
+                                toast.innerText = `✨ Benar! Balok ${l}×${w}×${h} = ${total} kubus!`;
+                            }
+                            
+                            setTimeout(() => {
+                                if (stage === targets.length - 1) {
+                                    playSound('win');
+                                    showFeedback(true, 300, `Jenius! Semua 5 tantangan Level 5 berhasil diselesaikan!`);
+                                } else {
+                                    stage++;
+                                    renderStage();
+                                }
+                            }, 1200);
+                        } else {
+                            showFeedback(false, 0, `Susunanmu: ${l}×${w}×${h} = ${total} kubus. Target: ${targetBlocks}.`);
+                        }
+                    }, 1200);
+                });
+            };
+
+            renderStage();
+        }
+
+        function playLevel6() {
+            // Generate ukuran acak untuk Kubus (panjang sisi 2 sampai 4)
+            const cubeSide = Math.floor(Math.random() * 3) + 2; 
+            
+            // Generate ukuran acak untuk Balok (p: 3-5, l: 2-3, t: 2-3)
+            let boxL = Math.floor(Math.random() * 3) + 3;
+            let boxW = Math.floor(Math.random() * 2) + 2;
+            let boxH = Math.floor(Math.random() * 2) + 2;
+            
+            // Memastikan dimensi balok tidak memiliki ukuran ketiga sisi yang sama persis (supaya tidak menjadi kubus)
+            if (boxL === boxW && boxW === boxH) {
+                boxL += 1;
+            }
+
+            const stages = [
+                {
+                    type: 'kubus',
+                    typeName: 'Kubus',
+                    l: cubeSide, w: cubeSide, h: cubeSide,
+                    color: 0xec4899,
+                    propAns: 'benar_kubus',
+                    volAns: cubeSide * cubeSide * cubeSide,
+                    title: 'Soal 1: Bangun Kubus'
+                },
+                {
+                    type: 'balok',
+                    typeName: 'Balok',
+                    l: boxL, w: boxW, h: boxH,
+                    color: 0xf43f5e,
+                    propAns: 'benar_balok',
+                    volAns: boxL * boxW * boxH,
+                    title: 'Soal 2: Bangun Balok'
+                }
+            ];
+
+            let stage = 0;
+
+            const renderStage = () => {
+                const current = stages[stage];
+                drawShape(current.l, current.w, current.h, { color: current.color, scale: 1.0 });
+
+                UI.levelUi.innerHTML = `
+                    <div class="bg-rose-50 p-3 sm:p-5 rounded-2xl border border-rose-200 shadow-sm flex flex-col h-full justify-between overflow-y-auto">
+                        <div>
+                            <!-- Header & Indicator 2 Soal -->
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="font-bold text-slate-500 text-xs sm:text-sm">Soal ${stage + 1} dari 2</span>
+                                <div class="flex space-x-1">
+                                    ${stages.map((_, idx) => `
+                                        <div class="w-3.5 h-3.5 rounded-full ${idx < stage ? 'bg-rose-500 text-white flex items-center justify-center text-[9px] font-bold' : idx === stage ? 'bg-amber-400 ring-2 ring-amber-300 animate-pulse' : 'bg-slate-200'}">${idx < stage ? '✓' : ''}</div>
+                                    `).join('')}
+                                </div>
+                            </div>
+
+                            <h3 class="text-lg sm:text-xl font-bold mb-1.5 text-rose-700 text-center title-font">UJIAN AKHIR</h3>
+                            <p class="text-xs sm:text-sm text-slate-600 mb-3 text-center">Analisis bangun 3D di sebelah kiri dan jawab pertanyaannya!</p>
+
+                            <div class="space-y-2.5 sm:space-y-3 mb-3">
+                                <div>
+                                    <label class="text-xs font-bold text-slate-600 block mb-1">1. Jenis Bangun Ruang?</label>
+                                    <select id="f-type" class="w-full border-2 border-rose-300 rounded-lg p-1.5 sm:p-2 font-bold text-slate-700 bg-white text-xs sm:text-sm">
+                                        <option value="">-- Pilih --</option>
+                                        <option value="kubus">Kubus</option>
+                                        <option value="balok">Balok</option>
+                                        <option value="limas">Limas</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-slate-600 block mb-1">2. Sifat & Ciri Bangun?</label>
+                                    <select id="f-prop" class="w-full border-2 border-rose-300 rounded-lg p-1.5 sm:p-2 font-bold text-slate-700 bg-white text-xs sm:text-sm">
+                                        <option value="">-- Pilih --</option>
+                                        <option value="benar_kubus">6 sisi berbentuk PERSEGI SAMA BESAR, 12 rusuk, 8 titik sudut</option>
+                                        <option value="benar_balok">6 sisi (sisi berhadapan sama besar/PERSEGI PANJANG), 12 rusuk, 8 titik sudut</option>
+                                        <option value="salah">5 sisi, 8 rusuk, 5 titik sudut</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-slate-600 block mb-1">3. Jumlah Kubus Satuan? (P=${current.l}, L=${current.w}, T=${current.h})</label>
+                                    <input type="number" id="f-vol" class="w-full border-2 border-rose-300 rounded-lg p-1.5 sm:p-2 font-bold text-slate-700 text-xs sm:text-sm" placeholder="Masukkan total kubus...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="btn-final" class="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-2.5 sm:py-3.5 rounded-xl shadow-[0_4px_0_#be123c] active:translate-y-[4px] active:shadow-none transition-all title-font text-base sm:text-lg">
+                            ${stage === 0 ? 'LANJUT KE SOAL 2 ▶' : 'SELESAIKAN GAME! 👑'}
+                        </button>
+                    </div>
+                `;
+
+                document.getElementById('btn-final').addEventListener('click', () => {
+                    const type = document.getElementById('f-type').value;
+                    const prop = document.getElementById('f-prop').value;
+                    const vol = parseInt(document.getElementById('f-vol').value);
+
+                    if (type === current.type && prop === current.propAns && vol === current.volAns) {
+                        playSound('correct');
+                        if (stage === stages.length - 1) {
+                            playSound('win');
+                            showFeedback(true, 1000, "🏆 MASTER BUILDER UNLOCKED! 🏆\nSelamat! Kamu berhasil menjawab soal Kubus dan Balok dengan sempurna!");
+                            UI.feedbackIcon.innerText = '👑';
+                        } else {
+                            stage++;
+                            renderStage();
+                        }
+                    } else {
+                        showFeedback(false, 0, `Ada data yang belum tepat pada ${current.typeName}. Periksa kembali jenis, sifat, dan hitungan volumenya!`);
+                    }
+                });
+            };
+
+            renderStage();
+        }
+
+        window.onload = () => {
+            renderHome();
+
+            // Memulai backsound seketika pada sentuhan/klik/tombol pertama tanpa jeda
+            const startAudioInstantly = () => {
+                initAudio();
+                if (!UI.home.classList.contains('hidden')) {
+                    startBGM();
+                }
+                ['pointerdown', 'touchstart', 'mousedown', 'keydown', 'click'].forEach(evt => {
+                    window.removeEventListener(evt, startAudioInstantly);
+                });
+            };
+
+            ['pointerdown', 'touchstart', 'mousedown', 'keydown', 'click'].forEach(evt => {
+                window.addEventListener(evt, startAudioInstantly);
+            });
+        };
+    </script>
+</body>
+</html>
